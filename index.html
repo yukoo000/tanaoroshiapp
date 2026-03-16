@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>棚卸スキャン</title>
+
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+
+<style>
+
+body{
+font-family:sans-serif;
+text-align:center;
+margin:10px;
+background-color:#fafdff;
+color:#626063;
+}
+
+input{
+font-size:20px;
+margin:5px;
+width:70%;
+background-color:#ffffff;
+border:0.5px solid #abced8;
+color:#626063;
+}
+
+button{
+font-size:18px;
+padding:8px;
+margin:5px;
+background-color:#eaf4fc;
+border:0.5px solid #abced8;
+border-radius:5px;
+color:#626063;
+}
+
+#camera-container{
+position:relative;
+width:100vw;
+max-width:400px;
+height:calc(100vw * 9 / 16);
+margin:auto;
+overflow:hidden;
+}
+
+#camera{
+width:100vw;
+height:100%;
+object-fit:cover;
+}
+
+#scan-area{
+position:absolute;
+top:50%;
+left:50%;
+transform:translate(-50%,-50%);
+width:260px;
+height:80px;
+border:3px solid red;
+pointer-events:none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<audio id="beep">
+<source src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg">
+</audio>
+
+<!-- ログイン -->
+
+<div id="staffEntry">
+
+<h2>ログイン</h2>
+
+<input id="staffInput" placeholder="担当ID"><br>
+
+<input id="passwordInput" type="password" placeholder="パスワード"><br>
+
+<button onclick="login()">ログイン</button>
+
+</div>
+
+<!-- アプリ -->
+
+<div id="app" style="display:none">
+
+<h2>棚卸スキャン</h2>
+
+担当: <span id="staffDisplay"></span><br>
+
+<button onclick="enableKeyboard('product')">品番手入力</button>
+<button onclick="enableKeyboard('qty')">数量手入力</button><br>
+
+品番<br>
+<input id="product" readonly placeholder="品番"><br>
+
+数量<br>
+<input id="qty" readonly inputmode="numeric" placeholder="数量"><br>
+
+<button onclick="saveData()">OK</button>
+<button onclick="clearInput()">NG</button><br>
+
+<button onclick="clearProduct()">品番削除</button>
+<button onclick="clearQty()">数量削除</button><br>
+
+<button onclick="sendBuffer()">データ送信</button>
+<button onclick="restartCamera()">カメラ再起動</button>
+
+<br><br>
+
+未送信件数: <span id="bufferCount">0</span>件
+
+<br><br>
+
+<div id="camera-container">
+
+<video id="camera" autoplay></video>
+
+<div id="scan-area"></div>
+
+</div>
+
+<p id="msg"></p>
+
+</div>
+
+<script>
+
+let staffID='';
+let lock=false;
+let codeReader;
+let lastScanTime=0;
+
+const GAS_URL="https://script.google.com/macros/s/AKfycbzmGpBQL0-JXhtGvgTdDCkRby6He2BSEq5GetUHw7DgFuwJ77-YsRnq_cdheclvMALk/exec";
+
+// ローカル保存
+let buffer = JSON.parse(localStorage.getItem("scanBuffer") || "[]");
+
+updateBufferDisplay();
+
+function updateBufferDisplay(){
+document.getElementById("bufferCount").innerText = buffer.length;
+}
+
+//////////////////////////////////////////////////
+//// ログイン
+//////////////////////////////////////////////////
+
+function login(){
+
+const staff=document.getElementById("staffInput").value.trim();
+const password=document.getElementById("passwordInput").value;
+
+if(!staff || !password){
+alert("IDとパスワード入力");
+return;
+}
+
+fetch(GAS_URL,{
+method:'POST',
+mode:'cors',
+headers:{'Content-Type':'text/plain'},
+body:JSON.stringify({
+type:"login",
+staff:staff,
+password:password
+})
+})
+
+.then(res=>res.json())
+.then(data=>{
+
+if(data.status==="ok"){
+
+staffID=staff;
+
+document.getElementById("staffDisplay").innerText=staff;
+
+document.getElementById("staffEntry").style.display="none";
+document.getElementById("app").style.display="block";
+
+startScanner();
+
+}else{
+
+alert("ログイン失敗");
+
+}
+
+});
+
+}
+
+//////////////////////////////////////////////////
+//// スキャナー
+//////////////////////////////////////////////////
+
+function startScanner(){
+
+const hints = new Map();
+
+hints.set(
+ZXing.DecodeHintType.POSSIBLE_FORMATS,
+[ZXing.BarcodeFormat.CODE_39]
+);
+
+codeReader = new ZXing.BrowserMultiFormatReader(hints);
+
+const video=document.getElementById("camera");
+
+codeReader.decodeFromVideoDevice(null,video,(result,err)=>{
+
+if(result){
+
+const now=Date.now();
+if(now-lastScanTime<650)return;
+
+lastScanTime=now;
+
+if(lock)return;
+lock=true;
+
+const text=result.getText();
+
+document.getElementById("beep").play();
+
+const hasLetter=/[A-Za-z]/.test(text);
+const onlyNumber=/^[0-9]+$/.test(text);
+const qtyFormat=/^[0-9]{1,6}$/;
+
+if(hasLetter){
+
+document.getElementById("product").value=text;
+
+}
+else if(onlyNumber && qtyFormat.test(text)){
+
+document.getElementById("qty").value=text;
+
+}
+else{
+
+document.getElementById("msg").innerText="読み取りエラー";
+
+}
+
+setTimeout(()=>{lock=false},500);
+
+}
+
+});
+
+}
+
+//////////////////////////////////////////////////
+//// 保存
+//////////////////////////////////////////////////
+
+function saveData(){
+
+const product=document.getElementById("product").value;
+const qty=document.getElementById("qty").value;
+
+if(!product || !qty){
+alert("品番と数量入力");
+return;
+}
+
+buffer.push({
+staff:staffID,
+product:product,
+qty:qty,
+time:Date.now()
+});
+
+localStorage.setItem("scanBuffer",JSON.stringify(buffer));
+
+updateBufferDisplay();
+
+document.getElementById("msg").innerText="保存";
+
+clearInput();
+
+if(buffer.length>=100){
+sendBuffer();
+}
+
+}
+
+//////////////////////////////////////////////////
+//// 送信
+//////////////////////////////////////////////////
+
+function sendBuffer(){
+
+if(buffer.length===0)return;
+
+fetch(GAS_URL,{
+method:'POST',
+mode:'cors',
+headers:{'Content-Type':'text/plain'},
+body:JSON.stringify({
+type:"scan",
+data:buffer
+})
+})
+
+.then(res=>res.json())
+.then(data=>{
+
+if(data.status==="ok"){
+
+buffer=[];
+localStorage.removeItem("scanBuffer");
+
+updateBufferDisplay();
+
+document.getElementById("msg").innerText="送信成功";
+
+}
+
+});
+
+}
+
+//////////////////////////////////////////////////
+//// その他
+//////////////////////////////////////////////////
+
+setInterval(()=>{
+if(buffer.length>0)sendBuffer();
+},300000);
+
+function clearInput(){
+document.getElementById("product").value="";
+document.getElementById("qty").value="";
+}
+
+function clearProduct(){
+document.getElementById("product").value="";
+}
+
+function clearQty(){
+document.getElementById("qty").value="";
+}
+
+function restartCamera(){
+if(codeReader)codeReader.reset();
+startScanner();
+}
+
+</script>
+
+</body>
+</html>
