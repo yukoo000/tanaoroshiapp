@@ -101,18 +101,15 @@ pointer-events:none;
 <button onclick="enableKeyboard('qty')">数量手入力</button><br>
 
 品番<br>
-<input id="product" readonly placeholder="品番"><br>
+<input id="product" readonly placeholder="品番"><button onclick="clearProduct()">clear</button><br>
 
 数量<br>
-<input id="qty" readonly inputmode="numeric" placeholder="数量"><br>
+<input id="qty" readonly inputmode="numeric" placeholder="数量"><button onclick="clearQty()">clear</button><br>
 
 <button onclick="saveData()">OK</button>
 <button onclick="clearInput()">NG</button><br>
 
-<button onclick="clearProduct()">品番削除</button>
-<button onclick="clearQty()">数量削除</button><br>
-
-<button onclick="sendBuffer()">データ送信</button>
+<button onclick="sendBuffer()">データの送信</button>
 <button onclick="restartCamera()">カメラ再起動</button>
 
 <br><br>
