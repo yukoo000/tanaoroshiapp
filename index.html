@@ -335,6 +335,26 @@ document.getElementById("msg").innerText="送信成功";
 
 }
 
+
+// ---------------- キーボード ----------------
+
+function enableKeyboard(id){
+
+const el=document.getElementById(id);
+
+el.readOnly=false;
+
+el.focus();
+
+}
+
+function disableKeyboard(id){
+
+document.getElementById(id).readOnly=true;
+
+}
+
+
 //////////////////////////////////////////////////
 //// その他
 //////////////////////////////////////////////////
